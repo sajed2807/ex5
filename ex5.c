@@ -38,6 +38,9 @@ static int dbSize = 0;
 /* ---------- Helpers ---------- */
 
 static void *safeMalloc(size_t n) {
+    /* malloc(0) is implementation-defined; avoid it */
+    if (n == 0) n = 1;
+
     void *p = malloc(n);
     if (!p) {
         printf("Memory allocation failed\n");
@@ -58,21 +61,19 @@ static char *readLine(void) {
     char buffer[1024];
 
     if (!fgets(buffer, sizeof(buffer), stdin)) {
-        /* EOF or error */
         char *empty = safeMalloc(1);
         empty[0] = '\0';
         return empty;
     }
 
-    /* remove trailing newline if exists */
     buffer[strcspn(buffer, "\n")] = '\0';
-
     return safeStrdup(buffer);
 }
 
 /* Read an integer choice safely using fgets + strtol. */
 static int readInt(void) {
     char line[128];
+
     while (1) {
         if (!fgets(line, sizeof(line), stdin)) {
             return -1; /* EOF */
@@ -82,7 +83,6 @@ static int readInt(void) {
         char *endptr = NULL;
         long v = strtol(line, &endptr, 10);
 
-        /* skip spaces */
         while (endptr && (*endptr == ' ' || *endptr == '\t')) endptr++;
 
         if (errno == 0 && endptr && (*endptr == '\0' || *endptr == '\n')) {
@@ -95,6 +95,7 @@ static int readInt(void) {
 
 static int countShows(void) {
     if (dbSize == 0 || database == NULL) return 0;
+
     int count = 0;
     for (int i = 0; i < dbSize; i++) {
         for (int j = 0; j < dbSize; j++) {
@@ -104,14 +105,14 @@ static int countShows(void) {
     return count;
 }
 
-/* Create a new dbSize x dbSize matrix and pack old shows row-major */
+/* Create a new newSize x newSize matrix and pack old shows row-major */
 static void resizeDatabase(int newSize) {
-    TVShow **newDB = safeMalloc((size_t)newSize * sizeof(*newDB));  / TVShow*** */
+    TVShow **newDB = safeMalloc((size_t)newSize * sizeof(*newDB)); / TVShow*** */
 
     for (int i = 0; i < newSize; i++) {
-        newDB[i] = safeMalloc((size_t)newSize * sizeof(newDB[i]));  / TVShow**  */
+        newDB[i] = safeMalloc((size_t)newSize * sizeof(newDB[i])); / TVShow**  */
         for (int j = 0; j < newSize; j++) {
-            newDB[i][j] = NULL;                                      /* TVShow*   */
+            newDB[i][j] = NULL;                                     /* TVShow*   */
         }
     }
 
@@ -155,10 +156,11 @@ static void freeSeasons(Season *head) {
     }
 }
 
-/* ---------- Core Logic ---------- */
+/* ---------- Find / Collect / Refill ---------- */
 
 static TVShow *findShowByName(const char *name) {
     if (!database) return NULL;
+
     for (int i = 0; i < dbSize; i++) {
         for (int j = 0; j < dbSize; j++) {
             if (database[i][j] && strcmp(database[i][j]->name, name) == 0) {
@@ -172,6 +174,12 @@ static TVShow *findShowByName(const char *name) {
 /* Pack all existing shows into an array (size = countShows). */
 static TVShow **collectShows(int *outN) {
     int n = countShows();
+    *outN = n;
+
+    if (n == 0) {
+        return NULL;
+    }
+
     TVShow **arr = safeMalloc((size_t)n * sizeof(*arr));
     int idx = 0;
 
@@ -182,8 +190,6 @@ static TVShow **collectShows(int *outN) {
             }
         }
     }
-
-    *outN = n;
     return arr;
 }
 
@@ -196,14 +202,15 @@ static void refillDatabasePacked(TVShow **arr, int n) {
     }
 }
 
+/* ---------- Core Logic ---------- */
+
 void addShow(void) {
     printf("Enter the name of the show:\n");
     char *name = readLine();
 
     if (name[0] == '\0') {
         printf("Invalid show name.\n");
-        free(nameԺ
-        );
+        free(name);
         return;
     }
 
@@ -225,12 +232,13 @@ void addShow(void) {
     newShow->seasons = NULL;
 
     int n = 0;
-    TVShow *tempList = collectShows(&n);                / size n */
-    TVShow **newList  = safeMalloc((size_t)(n + 1) * sizeof(*newList));
+    TVShow *tempList = collectShows(&n); / may be NULL if n==0 */
 
-    /* merge-insert sorted by name */
+    TVShow **newList = safeMalloc((size_t)(n + 1) * sizeof(*newList));
+
     int inserted = 0;
     int a = 0, b = 0;
+
     while (a < n) {
         if (!inserted && strcmp(newShow->name, tempList[a]->name) < 0) {
             newList[b++] = newShow;
@@ -243,7 +251,6 @@ void addShow(void) {
         newList[b++] = newShow;
     }
 
-    /* refill packed row-major */
     refillDatabasePacked(newList, b);
 
     free(tempList);
@@ -271,16 +278,14 @@ void addSeason(void) {
         return;
     }
 
-    /* (Optional) prevent duplicate season names inside the show */
-    Season *scan = target->seasons;
-    while (scan) {
+    /* prevent duplicate season names */
+    for (Season *scan = target->seasons; scan; scan = scan->next) {
         if (strcmp(scan->name, sName) == 0) {
             printf("Season already exists.\n");
             free(showName);
             free(sName);
             return;
         }
-        scan = scan->next;
     }
 
     Season *newS = safeMalloc(sizeof(*newS));
@@ -340,9 +345,8 @@ void addEpisode(void) {
         return;
     }
 
-    /* (Optional) prevent duplicate episode name inside same season */
-    Episode *scan = currS->episodes;
-    while (scan) {
+    /* prevent duplicate episode names */
+    for (Episode *scan = currS->episodes; scan; scan = scan->next) {
         if (strcmp(scan->name, eName) == 0) {
             printf("Episode already exists.\n");
             free(showName);
@@ -351,7 +355,6 @@ void addEpisode(void) {
             free(len);
             return;
         }
-        scan = scan->next;
     }
 
     Episode *newE = safeMalloc(sizeof(*newE));
@@ -397,7 +400,7 @@ void printDatabase(void) {
     }
 }
 
-/* ---------- Main + Cleanup ---------- */
+/* ---------- Cleanup ---------- */
 
 static void cleanup(void) {
     if (database != NULL) {
@@ -414,6 +417,8 @@ static void cleanup(void) {
         free(database);
     }
 }
+
+/* ---------- Main ---------- */
 
 int main(void) {
     while (1) {
@@ -438,3 +443,4 @@ int main(void) {
     printf("GOOD LUCK!\n");
     return 0;
 }
+
