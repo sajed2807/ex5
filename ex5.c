@@ -27,7 +27,7 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
-/* database is a pointer to a 2D array of TVShow pointers */
+/* database must be TVShow** to represent a 2D array of TVShow */
 TVShow ***database = NULL;
 int dbSize = 0;
 
@@ -95,13 +95,12 @@ static int findShow(const char *name) {
     return -1;
 }
 
-/* Fixed pointer levels and casting in resizeDB */
 static void resizeDB(int newSize) {
-    /* Allocate array of rows (TVShow **) */
+    /* Correcting the pointer levels: newDB is TVShow*** */
     TVShow **newDB = (TVShow *)safeMalloc((size_t)newSize * sizeof(TVShow *));
 
     for (int i = 0; i < newSize; i++) {
-        /* Allocate each row (array of TVShow *) */
+        /* Each row is TVShow** */
         newDB[i] = (TVShow **)safeMalloc((size_t)newSize * sizeof(TVShow *));
         for (int j = 0; j < newSize; j++) {
             newDB[i][j] = NULL;
@@ -113,7 +112,6 @@ static void resizeDB(int newSize) {
         newDB[i / newSize][i % newSize] = getShow(i);
     }
 
-    /* Free old database structure */
     if (database) {
         for (int i = 0; i < dbSize; i++) {
             free(database[i]);
@@ -172,7 +170,6 @@ void addSeason(void) {
 
     printf("Enter the name of the season:\n");
     char *seasonName = readLine();
-
     printf("Enter the position:\n");
     int pos = readInt();
 
@@ -191,7 +188,6 @@ void addSeason(void) {
         s->next = p->next;
         p->next = s;
     }
-
     free(showName);
 }
 
@@ -236,7 +232,6 @@ void addEpisode(void) {
         e->next = p->next;
         p->next = e;
     }
-
     free(showName);
     free(seasonName);
 }
