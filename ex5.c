@@ -27,6 +27,7 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
+/* database is a pointer to a 2D array of TVShow pointers */
 TVShow ***database = NULL;
 int dbSize = 0;
 
@@ -69,9 +70,11 @@ static int readInt(void) {
 static int showCount(void) {
     if (!database || dbSize == 0) return 0;
     int c = 0;
-    for (int i = 0; i < dbSize * dbSize; i++) {
-        if (database[i / dbSize][i % dbSize] != NULL) c++;
-        else break;
+    for (int i = 0; i < dbSize; i++) {
+        for (int j = 0; j < dbSize; j++) {
+            if (database[i][j] != NULL) c++;
+            else return c;
+        }
     }
     return c;
 }
@@ -92,14 +95,16 @@ static int findShow(const char *name) {
     return -1;
 }
 
-/* ===================== FIXED resizeDB ===================== */
+/* Fixed pointer levels and casting in resizeDB */
 static void resizeDB(int newSize) {
+    /* Allocate array of rows (TVShow **) */
     TVShow **newDB = (TVShow *)safeMalloc((size_t)newSize * sizeof(TVShow *));
 
     for (int i = 0; i < newSize; i++) {
+        /* Allocate each row (array of TVShow *) */
         newDB[i] = (TVShow **)safeMalloc((size_t)newSize * sizeof(TVShow *));
         for (int j = 0; j < newSize; j++) {
-            newDB[i][j] = NULL; /* TVShow* slot => OK */
+            newDB[i][j] = NULL;
         }
     }
 
@@ -108,8 +113,11 @@ static void resizeDB(int newSize) {
         newDB[i / newSize][i % newSize] = getShow(i);
     }
 
+    /* Free old database structure */
     if (database) {
-        for (int i = 0; i < dbSize; i++) free(database[i]);
+        for (int i = 0; i < dbSize; i++) {
+            free(database[i]);
+        }
         free(database);
     }
 
@@ -117,14 +125,11 @@ static void resizeDB(int newSize) {
     dbSize = newSize;
 }
 
-/* ===================== Linked Lists (minimal helpers) ===================== */
 static Season *findSeason(TVShow *s, const char *name) {
     for (Season *p = s->seasons; p; p = p->next)
         if (strcmp(p->name, name) == 0) return p;
     return NULL;
 }
-
-/* ===================== Add functions (names match the menu) ===================== */
 
 void addShow(void) {
     printf("Enter the name of the show:\n");
@@ -136,8 +141,9 @@ void addShow(void) {
         return;
     }
 
+    int currentCount = showCount();
     if (dbSize == 0) resizeDB(1);
-    else if (showCount() == dbSize * dbSize) resizeDB(dbSize + 1);
+    else if (currentCount == dbSize * dbSize) resizeDB(dbSize + 1);
 
     TVShow *s = (TVShow *)safeMalloc(sizeof(TVShow));
     s->name = name;
@@ -147,7 +153,9 @@ void addShow(void) {
     int pos = 0;
     while (pos < count && strcmp(getShow(pos)->name, name) < 0) pos++;
 
-    for (int i = count; i > pos; i--) setShow(i, getShow(i - 1));
+    for (int i = count; i > pos; i--) {
+        setShow(i, getShow(i - 1));
+    }
     setShow(pos, s);
 }
 
@@ -174,12 +182,12 @@ void addSeason(void) {
     s->next = NULL;
 
     TVShow *show = getShow(idx);
-    if (pos <= 0 || show->seasons == NULL) {
+    if (pos <= 1 || show->seasons == NULL) {
         s->next = show->seasons;
         show->seasons = s;
     } else {
         Season *p = show->seasons;
-        for (int i = 0; i < pos - 1 && p->next; i++) p = p->next;
+        for (int i = 0; i < pos - 2 && p->next; i++) p = p->next;
         s->next = p->next;
         p->next = s;
     }
@@ -188,8 +196,6 @@ void addSeason(void) {
 }
 
 void addEpisode(void) {
-    /* Minimal implementation just to compile;
-       (If your EX5 requires full validation/printing/deleting, tell me and I’ll provide the full required version.) */
     printf("Enter the name of the show:\n");
     char *showName = readLine();
     int idx = findShow(showName);
@@ -211,10 +217,8 @@ void addEpisode(void) {
 
     printf("Enter the name of the episode:\n");
     char *epName = readLine();
-
     printf("Enter the length:\n");
     char *len = readLine();
-
     printf("Enter the position:\n");
     int pos = readInt();
 
@@ -223,12 +227,12 @@ void addEpisode(void) {
     e->length = len;
     e->next = NULL;
 
-    if (pos <= 0 || season->episodes == NULL) {
+    if (pos <= 1 || season->episodes == NULL) {
         e->next = season->episodes;
         season->episodes = e;
     } else {
         Episode *p = season->episodes;
-        for (int i = 0; i < pos - 1 && p->next; i++) p = p->next;
+        for (int i = 0; i < pos - 2 && p->next; i++) p = p->next;
         e->next = p->next;
         p->next = e;
     }
@@ -236,8 +240,6 @@ void addEpisode(void) {
     free(showName);
     free(seasonName);
 }
-
-/* ===================== Menus ===================== */
 
 void addMenu(void) {
     printf("Choose an option:\n");
@@ -253,7 +255,6 @@ void addMenu(void) {
 
 void printArray(void) {
     if (dbSize == 0 || database == NULL) return;
-
     for (int i = 0; i < dbSize; i++) {
         for (int j = 0; j < dbSize; j++) {
             if (database[i][j]) printf("[%s] ", database[i][j]->name);
@@ -275,7 +276,6 @@ int main(void) {
         else if (c == 2) printArray();
         else if (c == 3) break;
     }
-
     printf("GOOD LUCK!\n");
     return 0;
 }
