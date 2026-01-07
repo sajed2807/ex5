@@ -27,7 +27,7 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
-/* Global database: Pointer to a 2D array of TVShow pointers */
+/* database is TVShow*** to represent a 2D array of TVShow pointers */
 TVShow ***database = NULL;
 int dbSize = 0;
 
@@ -97,13 +97,13 @@ static int findShow(const char *name) {
     return -1;
 }
 
-/* FIXED resizeDB function with correct pointer levels */
+/* Corrected resizeDB function to match exact pointer levels in your images */
 static void resizeDB(int newSize) {
-    /* 1. Allocate rows: Needs TVShow*** casting */
+    /* Allocate the rows: cast must be (TVShow *) */
     TVShow **newDB = (TVShow *)safeMalloc((size_t)newSize * sizeof(TVShow *));
 
     for (int i = 0; i < newSize; i++) {
-        /* 2. Allocate columns: Needs TVShow** casting */
+        /* Allocate each row: cast must be (TVShow **) */
         newDB[i] = (TVShow **)safeMalloc((size_t)newSize * sizeof(TVShow *));
         for (int j = 0; j < newSize; j++) {
             newDB[i][j] = NULL;
