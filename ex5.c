@@ -9,6 +9,9 @@ Exercise: EX5
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
+/* ---------- Structs ---------- */
 
 typedef struct Episode {
     char *name;
@@ -27,10 +30,12 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
-TVShow ***database = NULL;
-int dbSize = 0;
+/* ---------- Globals ---------- */
 
-/* --- Helper Functions --- */
+static TVShow ***database = NULL;
+static int dbSize = 0;
+
+/* ---------- Helpers ---------- */
 
 static void *safeMalloc(size_t n) {
     void *p = malloc(n);
@@ -41,12 +46,51 @@ static void *safeMalloc(size_t n) {
     return p;
 }
 
+static char *safeStrdup(const char *s) {
+    size_t len = strlen(s);
+    char *out = safeMalloc(len + 1);
+    memcpy(out, s, len + 1);
+    return out;
+}
+
+/* Read a full line safely (without trailing '\n'). Returns heap string. */
 static char *readLine(void) {
     char buffer[1024];
-    scanf(" %[^\n]", buffer);
-    char *s = safeMalloc(strlen(buffer) + 1);
-    strcpy(s, buffer);
-    return s;
+
+    if (!fgets(buffer, sizeof(buffer), stdin)) {
+        /* EOF or error */
+        char *empty = safeMalloc(1);
+        empty[0] = '\0';
+        return empty;
+    }
+
+    /* remove trailing newline if exists */
+    buffer[strcspn(buffer, "\n")] = '\0';
+
+    return safeStrdup(buffer);
+}
+
+/* Read an integer choice safely using fgets + strtol. */
+static int readInt(void) {
+    char line[128];
+    while (1) {
+        if (!fgets(line, sizeof(line), stdin)) {
+            return -1; /* EOF */
+        }
+
+        errno = 0;
+        char *endptr = NULL;
+        long v = strtol(line, &endptr, 10);
+
+        /* skip spaces */
+        while (endptr && (*endptr == ' ' || *endptr == '\t')) endptr++;
+
+        if (errno == 0 && endptr && (*endptr == '\0' || *endptr == '\n')) {
+            return (int)v;
+        }
+
+        printf("Invalid input, try again:\n");
+    }
 }
 
 static int countShows(void) {
@@ -60,14 +104,14 @@ static int countShows(void) {
     return count;
 }
 
-/* ✅ FIXED: no casts + no unused variables */
+/* Create a new dbSize x dbSize matrix and pack old shows row-major */
 static void resizeDatabase(int newSize) {
-    TVShow **newDB = safeMalloc((size_t)newSize * sizeof(*newDB));          / TVShow*** */
+    TVShow **newDB = safeMalloc((size_t)newSize * sizeof(*newDB));  / TVShow*** */
 
     for (int i = 0; i < newSize; i++) {
-        newDB[i] = safeMalloc((size_t)newSize * sizeof(newDB[i]));          / TVShow**  */
+        newDB[i] = safeMalloc((size_t)newSize * sizeof(newDB[i]));  / TVShow**  */
         for (int j = 0; j < newSize; j++) {
-            newDB[i][j] = NULL;                                              /* TVShow*   */
+            newDB[i][j] = NULL;                                      /* TVShow*   */
         }
     }
 
@@ -89,7 +133,7 @@ static void resizeDatabase(int newSize) {
     dbSize = newSize;
 }
 
-/* --- Linked List Management --- */
+/* ---------- Free linked-lists ---------- */
 
 static void freeEpisodes(Episode *head) {
     while (head) {
@@ -111,65 +155,106 @@ static void freeSeasons(Season *head) {
     }
 }
 
-/* --- Core Logic --- */
+/* ---------- Core Logic ---------- */
+
+static TVShow *findShowByName(const char *name) {
+    if (!database) return NULL;
+    for (int i = 0; i < dbSize; i++) {
+        for (int j = 0; j < dbSize; j++) {
+            if (database[i][j] && strcmp(database[i][j]->name, name) == 0) {
+                return database[i][j];
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Pack all existing shows into an array (size = countShows). */
+static TVShow **collectShows(int *outN) {
+    int n = countShows();
+    TVShow **arr = safeMalloc((size_t)n * sizeof(*arr));
+    int idx = 0;
+
+    for (int i = 0; i < dbSize; i++) {
+        for (int j = 0; j < dbSize; j++) {
+            if (database[i][j]) {
+                arr[idx++] = database[i][j];
+            }
+        }
+    }
+
+    *outN = n;
+    return arr;
+}
+
+static void refillDatabasePacked(TVShow **arr, int n) {
+    for (int i = 0; i < dbSize; i++) {
+        for (int j = 0; j < dbSize; j++) {
+            int k = i * dbSize + j;
+            database[i][j] = (k < n) ? arr[k] : NULL;
+        }
+    }
+}
 
 void addShow(void) {
     printf("Enter the name of the show:\n");
     char *name = readLine();
 
-    /* Check if exists */
-    for (int i = 0; i < dbSize; i++) {
-        for (int j = 0; j < dbSize; j++) {
-            if (database != NULL && database[i][j] && strcmp(database[i][j]->name, name) == 0) {
-                printf("Show already exists.\n");
-                free(name);
-                return;
-            }
-        }
+    if (name[0] == '\0') {
+        printf("Invalid show name.\n");
+        free(nameԺ
+        );
+        return;
+    }
+
+    if (findShowByName(name)) {
+        printf("Show already exists.\n");
+        free(name);
+        return;
     }
 
     int currentCount = countShows();
-    if (dbSize == 0) resizeDatabase(1);
-    else if (currentCount == dbSize * dbSize) resizeDatabase(dbSize + 1);
+    if (dbSize == 0) {
+        resizeDatabase(1);
+    } else if (currentCount == dbSize * dbSize) {
+        resizeDatabase(dbSize + 1);
+    }
 
-    TVShow *newShow = safeMalloc(sizeof(TVShow));
+    TVShow *newShow = safeMalloc(sizeof(*newShow));
     newShow->name = name;
     newShow->seasons = NULL;
 
-    /* Insert sorted */
-    TVShow *tempList[100];
-    int n = countShows();
-    int idx = 0;
+    int n = 0;
+    TVShow *tempList = collectShows(&n);                / size n */
+    TVShow **newList  = safeMalloc((size_t)(n + 1) * sizeof(*newList));
 
-    for (int i = 0; i < dbSize; i++)
-        for (int j = 0; j < dbSize; j++)
-            if (database[i][j]) tempList[idx++] = database[i][j];
-
-    int pos = 0;
-    while (pos < n && strcmp(tempList[pos]->name, name) < 0) pos++;
-
-    for (int i = n; i > pos; i--) tempList[i] = tempList[i - 1];
-    tempList[pos] = newShow;
-    n++;
-
-    /* Clear and refill database packed row-major */
-    for (int i = 0; i < dbSize; i++) {
-        for (int j = 0; j < dbSize; j++) {
-            int k = i * dbSize + j;
-            database[i][j] = (k < n) ? tempList[k] : NULL;
+    /* merge-insert sorted by name */
+    int inserted = 0;
+    int a = 0, b = 0;
+    while (a < n) {
+        if (!inserted && strcmp(newShow->name, tempList[a]->name) < 0) {
+            newList[b++] = newShow;
+            inserted = 1;
+        } else {
+            newList[b++] = tempList[a++];
         }
     }
+    if (!inserted) {
+        newList[b++] = newShow;
+    }
+
+    /* refill packed row-major */
+    refillDatabasePacked(newList, b);
+
+    free(tempList);
+    free(newList);
 }
 
 void addSeason(void) {
     printf("Enter the name of the show:\n");
     char *showName = readLine();
 
-    TVShow *target = NULL;
-    for (int i = 0; i < dbSize; i++)
-        for (int j = 0; j < dbSize; j++)
-            if (database[i][j] && strcmp(database[i][j]->name, showName) == 0) target = database[i][j];
-
+    TVShow *target = findShowByName(showName);
     if (!target) {
         printf("Show not found.\n");
         free(showName);
@@ -179,13 +264,33 @@ void addSeason(void) {
     printf("Enter the name of the season:\n");
     char *sName = readLine();
 
-    Season *newS = safeMalloc(sizeof(Season));
+    if (sName[0] == '\0') {
+        printf("Invalid season name.\n");
+        free(showName);
+        free(sName);
+        return;
+    }
+
+    /* (Optional) prevent duplicate season names inside the show */
+    Season *scan = target->seasons;
+    while (scan) {
+        if (strcmp(scan->name, sName) == 0) {
+            printf("Season already exists.\n");
+            free(showName);
+            free(sName);
+            return;
+        }
+        scan = scan->next;
+    }
+
+    Season *newS = safeMalloc(sizeof(*newS));
     newS->name = sName;
     newS->episodes = NULL;
     newS->next = NULL;
 
-    if (!target->seasons) target->seasons = newS;
-    else {
+    if (!target->seasons) {
+        target->seasons = newS;
+    } else {
         Season *curr = target->seasons;
         while (curr->next) curr = curr->next;
         curr->next = newS;
@@ -198,11 +303,7 @@ void addEpisode(void) {
     printf("Enter the name of the show:\n");
     char *showName = readLine();
 
-    TVShow *target = NULL;
-    for (int i = 0; i < dbSize; i++)
-        for (int j = 0; j < dbSize; j++)
-            if (database[i][j] && strcmp(database[i][j]->name, showName) == 0) target = database[i][j];
-
+    TVShow *target = findShowByName(showName);
     if (!target) {
         printf("Show not found.\n");
         free(showName);
@@ -213,7 +314,9 @@ void addEpisode(void) {
     char *sName = readLine();
 
     Season *currS = target->seasons;
-    while (currS && strcmp(currS->name, sName) != 0) currS = currS->next;
+    while (currS && strcmp(currS->name, sName) != 0) {
+        currS = currS->next;
+    }
 
     if (!currS) {
         printf("Season not found.\n");
@@ -222,18 +325,43 @@ void addEpisode(void) {
         return;
     }
 
-    Episode *newE = safeMalloc(sizeof(Episode));
-
     printf("Enter the name of the episode:\n");
-    newE->name = readLine();
+    char *eName = readLine();
 
     printf("Enter the length (hh:mm:ss):\n");
-    newE->length = readLine();
+    char *len = readLine();
 
+    if (eName[0] == '\0' || len[0] == '\0') {
+        printf("Invalid episode data.\n");
+        free(showName);
+        free(sName);
+        free(eName);
+        free(len);
+        return;
+    }
+
+    /* (Optional) prevent duplicate episode name inside same season */
+    Episode *scan = currS->episodes;
+    while (scan) {
+        if (strcmp(scan->name, eName) == 0) {
+            printf("Episode already exists.\n");
+            free(showName);
+            free(sName);
+            free(eName);
+            free(len);
+            return;
+        }
+        scan = scan->next;
+    }
+
+    Episode *newE = safeMalloc(sizeof(*newE));
+    newE->name = eName;
+    newE->length = len;
     newE->next = NULL;
 
-    if (!currS->episodes) currS->episodes = newE;
-    else {
+    if (!currS->episodes) {
+        currS->episodes = newE;
+    } else {
         Episode *currE = currS->episodes;
         while (currE->next) currE = currE->next;
         currE->next = newE;
@@ -244,6 +372,11 @@ void addEpisode(void) {
 }
 
 void printDatabase(void) {
+    if (!database || dbSize == 0) {
+        printf("(empty)\n");
+        return;
+    }
+
     for (int i = 0; i < dbSize; i++) {
         for (int j = 0; j < dbSize; j++) {
             if (database[i][j]) {
@@ -264,21 +397,9 @@ void printDatabase(void) {
     }
 }
 
-int main(void) {
-    int choice;
+/* ---------- Main + Cleanup ---------- */
 
-    while (1) {
-        printf("1. Add TV Show\n2. Add Season\n3. Add Episode\n4. Print Database\n5. Exit\n");
-        if (scanf("%d", &choice) != 1) break;
-
-        if (choice == 1) addShow();
-        else if (choice == 2) addSeason();
-        else if (choice == 3) addEpisode();
-        else if (choice == 4) printDatabase();
-        else if (choice == 5) break;
-    }
-
-    /* Cleanup */
+static void cleanup(void) {
     if (database != NULL) {
         for (int i = 0; i < dbSize; i++) {
             for (int j = 0; j < dbSize; j++) {
@@ -292,7 +413,28 @@ int main(void) {
         }
         free(database);
     }
+}
 
+int main(void) {
+    while (1) {
+        printf("1. Add TV Show\n"
+               "2. Add Season\n"
+               "3. Add Episode\n"
+               "4. Print Database\n"
+               "5. Exit\n");
+
+        int choice = readInt();
+        if (choice == -1) break;
+
+        if (choice == 1) addShow();
+        else if (choice == 2) addSeason();
+        else if (choice == 3) addEpisode();
+        else if (choice == 4) printDatabase();
+        else if (choice == 5) break;
+        else printf("Invalid choice.\n");
+    }
+
+    cleanup();
     printf("GOOD LUCK!\n");
     return 0;
 }
