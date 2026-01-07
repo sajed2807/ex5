@@ -27,7 +27,7 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
-/* database must be TVShow** to represent a 2D array of TVShow */
+/* Global database: Pointer to a 2D array of TVShow pointers */
 TVShow ***database = NULL;
 int dbSize = 0;
 
@@ -43,16 +43,18 @@ static void *safeMalloc(size_t n) {
 static char *readLine(void) {
     int c;
     int cap = 32, len = 0;
-    char *s = safeMalloc((size_t)cap);
+    char *s = (char *)safeMalloc((size_t)cap);
 
     while ((c = getchar()) != EOF && c != '\n') {
         if (len + 1 >= cap) {
             cap *= 2;
-            s = realloc(s, (size_t)cap);
-            if (!s) {
+            char *temp = (char *)realloc(s, (size_t)cap);
+            if (!temp) {
+                free(s);
                 printf("Memory allocation failed\n");
                 exit(1);
             }
+            s = temp;
         }
         s[len++] = (char)c;
     }
@@ -95,12 +97,13 @@ static int findShow(const char *name) {
     return -1;
 }
 
+/* FIXED resizeDB function with correct pointer levels */
 static void resizeDB(int newSize) {
-    /* Correcting the pointer levels: newDB is TVShow*** */
+    /* 1. Allocate rows: Needs TVShow*** casting */
     TVShow **newDB = (TVShow *)safeMalloc((size_t)newSize * sizeof(TVShow *));
 
     for (int i = 0; i < newSize; i++) {
-        /* Each row is TVShow** */
+        /* 2. Allocate columns: Needs TVShow** casting */
         newDB[i] = (TVShow **)safeMalloc((size_t)newSize * sizeof(TVShow *));
         for (int j = 0; j < newSize; j++) {
             newDB[i][j] = NULL;
@@ -112,6 +115,7 @@ static void resizeDB(int newSize) {
         newDB[i / newSize][i % newSize] = getShow(i);
     }
 
+    /* Free old structure */
     if (database) {
         for (int i = 0; i < dbSize; i++) {
             free(database[i]);
