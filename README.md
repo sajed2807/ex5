@@ -71,7 +71,7 @@ static TVShow *findShow(const char *name) {
     return NULL;
 }
 
-/* ---------- Add Show ---------- */
+/* ---------- Commands ---------- */
 
 void addShow(void) {
     char *name = readLine();
@@ -88,8 +88,6 @@ void addShow(void) {
     shows[showCount++] = s;
 }
 
-/* ---------- Add Season ---------- */
-
 void addSeason(void) {
     char *showName = readLine();
     TVShow *s = findShow(showName);
@@ -99,6 +97,7 @@ void addSeason(void) {
     }
 
     char *seasonName = readLine();
+
     Season *scan = s->seasons;
     while (scan) {
         if (strcmp(scan->name, seasonName) == 0) {
@@ -117,8 +116,6 @@ void addSeason(void) {
 
     free(showName);
 }
-
-/* ---------- Add Episode ---------- */
 
 void addEpisode(void) {
     char *showName = readLine();
@@ -151,8 +148,6 @@ void addEpisode(void) {
     free(showName);
     free(seasonName);
 }
-
-/* ---------- Print ---------- */
 
 void printDatabase(void) {
     for (int i = 0; i < showCount; i++) {
@@ -200,6 +195,8 @@ void cleanup(void) {
 int main(void) {
     while (1) {
         int c = readInt();
+        if (c == -1) break;
+
         if (c == 1) addShow();
         else if (c == 2) addSeason();
         else if (c == 3) addEpisode();
