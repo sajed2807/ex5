@@ -1,23 +1,21 @@
 /*
-Name: Sajed Isa
+Name: Sajad Isa
 ID: 325949089
-Exercise: EX5
+Exercise: ex5
 */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ================= STRUCTS ================= */
-
 typedef struct Episode {
     char *name;
-    char length;              / format XX:XX:XX */
+    char *length;              // format XX:XX:XX
     struct Episode *next;
 } Episode;
 
 typedef struct Season {
-    char *name;
+    int number;
     Episode *episodes;
     struct Season *next;
 } Season;
@@ -27,19 +25,20 @@ typedef struct TVShow {
     Season *seasons;
 } TVShow;
 
-/* ================= GLOBALS ================= */
+/* -------- Globals -------- */
+TVShow **shows = NULL;
+int showsCount = 0;
 
-TVShow ***database = NULL;
-int dbSize = 0;
-
-/* ================= UTIL ================= */
-
+/* -------- Utilities -------- */
 char *readLine(void) {
-    char *line = NULL;
-    size_t size = 0;
-    getline(&line, &size, stdin);
-    line[strcspn(line, "\n")] = '\0';
-    return line;
+    char buffer[1024];
+    if (!fgets(buffer, sizeof(buffer), stdin)) {
+        return NULL;
+    }
+    buffer[strcspn(buffer, "\n")] = '\0';
+    char *s = malloc(strlen(buffer) + 1);
+    strcpy(s, buffer);
+    return s;
 }
 
 int validLength(const char *s) {
@@ -53,29 +52,27 @@ int validLength(const char *s) {
            s[7] >= '0' && s[7] <= '9';
 }
 
-/* ================= FIND ================= */
-
+/* -------- Core Functions -------- */
 TVShow *findShow(const char *name) {
-    for (int i = 0; i < dbSize; i++)
-        for (int j = 0; j < dbSize; j++)
-            if (database[i][j] && strcmp(database[i][j]->name, name) == 0)
-                return database[i][j];
+    for (int i = 0; i < showsCount; i++) {
+        if (strcmp(shows[i]->name, name) == 0)
+            return shows[i];
+    }
     return NULL;
 }
 
-Season *findSeason(TVShow *s, const char *name) {
-    for (Season *c = s->seasons; c; c = c->next)
-        if (strcmp(c->name, name) == 0)
-            return c;
+Season *findSeason(TVShow *show, int number) {
+    Season *s = show->seasons;
+    while (s) {
+        if (s->number == number)
+            return s;
+        s = s->next;
+    }
     return NULL;
 }
 
-/* ================= ADD ================= */
-
-void addTVShow(void) {
-    printf("Enter the name of the show:\n");
+void addShow(void) {
     char *name = readLine();
-
     if (findShow(name)) {
         printf("Show already exists.\n");
         free(name);
@@ -86,169 +83,136 @@ void addTVShow(void) {
     s->name = name;
     s->seasons = NULL;
 
-    TVShow **newDB = realloc(database, (dbSize + 1) * sizeof(TVShow *));
-    database = newDB;
-
-    database[dbSize] = malloc((dbSize + 1) * sizeof(TVShow *));
-    for (int i = 0; i <= dbSize; i++)
-        database[dbSize][i] = NULL;
-
-    database[dbSize][dbSize] = s;
-    dbSize++;
+    shows = realloc(shows, sizeof(TVShow*) * (showsCount + 1));
+    shows[showsCount++] = s;
 }
 
 void addSeason(void) {
-    printf("Enter the name of the show:\n");
     char *showName = readLine();
-    TVShow *s = findShow(showName);
+    TVShow *show = findShow(showName);
     free(showName);
 
-    if (!s) {
+    if (!show) {
         printf("Show not found.\n");
         return;
     }
 
-    printf("Enter the name of the season:\n");
-    char *seasonName = readLine();
-
-    if (findSeason(s, seasonName)) {
-        printf("Season already exists.\n");
-        free(seasonName);
-        return;
-    }
-
-    printf("Enter the position:\n");
-    int pos;
-    scanf("%d", &pos);
+    int num;
+    scanf("%d", &num);
     getchar();
 
-    Season *newS = malloc(sizeof(Season));
-    newS->name = seasonName;
-    newS->episodes = NULL;
-    newS->next = NULL;
-
-    if (pos <= 0 || !s->seasons) {
-        newS->next = s->seasons;
-        s->seasons = newS;
+    if (findSeason(show, num)) {
+        printf("Season already exists.\n");
         return;
     }
 
-    Season *cur = s->seasons;
-    for (int i = 1; cur->next && i < pos; i++)
-        cur = cur->next;
-
-    newS->next = cur->next;
-    cur->next = newS;
+    Season *s = malloc(sizeof(Season));
+    s->number = num;
+    s->episodes = NULL;
+    s->next = show->seasons;
+    show->seasons = s;
 }
 
 void addEpisode(void) {
-    printf("Enter the name of the show:\n");
     char *showName = readLine();
-    TVShow *s = findShow(showName);
+    TVShow *show = findShow(showName);
     free(showName);
 
-    if (!s) {
+    if (!show) {
         printf("Show not found.\n");
         return;
     }
 
-    printf("Enter the name of the season:\n");
-    char *seasonName = readLine();
-    Season *se = findSeason(s, seasonName);
-    free(seasonName);
+    int seasonNum;
+    scanf("%d", &seasonNum);
+    getchar();
 
-    if (!se) {
+    Season *season = findSeason(show, seasonNum);
+    if (!season) {
         printf("Season not found.\n");
         return;
     }
 
-    printf("Enter the name of the episode:\n");
     char *epName = readLine();
-
-    printf("Enter the length (xx:xx:xx):\n");
     char *len = readLine();
-    while (!validLength(len)) {
-        printf("Invalid length, enter again:\n");
-        free(len);
-        len = readLine();
-    }
 
-    printf("Enter the position:\n");
-    int pos;
-    scanf("%d", &pos);
-    getchar();
+    if (!validLength(len)) {
+        printf("Invalid length.\n");
+        free(epName);
+        free(len);
+        return;
+    }
 
     Episode *e = malloc(sizeof(Episode));
     e->name = epName;
     e->length = len;
-    e->next = NULL;
-
-    if (pos <= 0 || !se->episodes) {
-        e->next = se->episodes;
-        se->episodes = e;
-        return;
-    }
-
-    Episode *cur = se->episodes;
-    for (int i = 1; cur->next && i < pos; i++)
-        cur = cur->next;
-
-    e->next = cur->next;
-    cur->next = e;
+    e->next = season->episodes;
+    season->episodes = e;
 }
 
-/* ================= CLEANUP ================= */
+void printAll(void) {
+    for (int i = 0; i < showsCount; i++) {
+        TVShow *s = shows[i];
+        printf("%s\n", s->name);
+        Season *se = s->seasons;
+        while (se) {
+            printf("\tSeason %d\n", se->number);
+            Episode *e = se->episodes;
+            while (e) {
+                printf("\t\t%s %s\n", e->name, e->length);
+                e = e->next;
+            }
+            se = se->next;
+        }
+    }
+}
 
 void cleanup(void) {
-    for (int i = 0; i < dbSize; i++) {
-        for (int j = 0; j < dbSize; j++) {
-            TVShow *s = database[i][j];
-            if (!s) continue;
-
-            Season *se = s->seasons;
-            while (se) {
-                Episode *e = se->episodes;
-                while (e) {
-                    Episode *et = e;
-                    e = e->next;
-                    free(et->name);
-                    free(et->length);
-                    free(et);
-                }
-                Season *st = se;
-                se = se->next;
-                free(st->name);
-                free(st);
+    for (int i = 0; i < showsCount; i++) {
+        TVShow *s = shows[i];
+        Season *se = s->seasons;
+        while (se) {
+            Episode *e = se->episodes;
+            while (e) {
+                Episode *tmpE = e;
+                e = e->next;
+                free(tmpE->name);
+                free(tmpE->length);
+                free(tmpE);
             }
-            free(s->name);
-            free(s);
+            Season *tmpS = se;
+            se = se->next;
+            free(tmpS);
         }
-        free(database[i]);
+        free(s->name);
+        free(s);
     }
-    free(database);
+    free(shows);
 }
 
-/* ================= MAIN ================= */
-
+/* -------- Main -------- */
 int main(void) {
     int choice;
-    while (1) {
-        printf("Choose an option:\n1. Add\n2. Delete\n3. Print\n4. Exit\n");
+    do {
+        printf("Choose an option:\n");
+        printf("1. Add\n2. Delete\n3. Print\n4. Exit\n");
         scanf("%d", &choice);
         getchar();
 
         if (choice == 1) {
-            printf("Choose an option:\n1. Add a TV show\n2. Add a season\n3. Add an episode\n");
-            scanf("%d", &choice);
+            int sub;
+            printf("1. Add a TV show\n2. Add a season\n3. Add an episode\n");
+            scanf("%d", &sub);
             getchar();
-            if (choice == 1) addTVShow();
-            else if (choice == 2) addSeason();
-            else if (choice == 3) addEpisode();
+            if (sub == 1) addShow();
+            else if (sub == 2) addSeason();
+            else if (sub == 3) addEpisode();
+        } else if (choice == 3) {
+            printAll();
         }
-        else if (choice == 4) {
-            cleanup();
-            break;
-        }
-    }
+
+    } while (choice != 4);
+
+    cleanup();
     return 0;
 }
